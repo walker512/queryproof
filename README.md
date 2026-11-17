@@ -73,7 +73,7 @@ python -m unittest discover -s tests -v
 python -m compileall -q queryproof.py
 ```
 
-Tests cover real CSV/SQLite round trips, committed WAL snapshots, tampering, hostile SQL, time/size/row limits, unknown columns, BLOBs, HTML injection and CLI failure/permission behavior. CI runs Python 3.11–3.13 on Linux and Python 3.12 on Windows; hosted CI results must be checked after publication.
+Tests cover real CSV/SQLite round trips, committed WAL snapshots, tampering, hostile SQL, time/size/row limits, unknown columns, BLOBs, HTML injection and CLI failure/permission behavior. The 36-test hosted matrix passed on Python 3.11–3.13 on Linux and Python 3.12 on Windows. [Validation records the exact tested commit, run and remaining limits](VALIDATION.md).
 
 MIT. Original implementation. No promise of growth, universal competitor superiority or automatic data correctness.
 

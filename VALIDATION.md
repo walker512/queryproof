@@ -1,65 +1,40 @@
-# Local validation
+# Validation · QueryProof 0.2.0
 
-Validated using Python 3.12 / the runtime SQLite version recorded in generated receipts.
+## Current verified state
 
-- 21 unittest cases passed with `python -m unittest discover -s tests -v`.
-- Bytecode compilation passed.
-- Documented inflated-JOIN CLI example created a receipt, returned 90.0, and verified successfully. Its diagnostic predicted 5 inner rows and 1 many-to-many key.
-- Corrected EXISTS query returned 60.0 and verified successfully.
-- These are fictional fixtures, not private user data or claims of production adoption.
-- Hostile SQL tests exercise DELETE, DROP, ATTACH, PRAGMA write, extension/file functions, random/clock functions, VACUUM, BEGIN and multiple statements. Source file hash remained unchanged.
-- Tampered receipt, tampered database and rechecksummed incorrect result all failed validation.
-- CSV import preserves leading zeros, quoted multiline fields and empty strings. Bad headers/width/quotes fail and clean up the partial snapshot.
-- Committed WAL data survives snapshot backup.
-- HTML escaping is unit-tested with script-shaped text. A headless Chromium visual check was attempted but blocked by this execution sandbox's socket/filesystem constraints before page load. **Visual/browser QA has not passed** and is a review item, not a claimed result.
-- Hosted GitHub CI and Windows execution are configured but **not run here**. SQLite connections are explicitly closed to avoid Windows file locks, and Unix-only mode assertions are skipped on Windows.
+- **36 tests pass locally.** Bytecode compilation and the documented create → verify CLI workflows pass. A clean virtual environment installation was also exercised outside the repository: the installed `queryproof` entry point created and verified a real fictional-data bundle.
+- **Hosted CI passed on Linux Python 3.11, 3.12 and 3.13, and Windows Python 3.12.** [Successful run 43997341003](https://github.com/walker512/queryproof-candidate/actions/runs/43997341003) tested remote commit `b14ba2b59972a247257003812c8bd7b123f1b5a6`. Its downloaded source archive matched all 18 tracked file SHA-256 hashes of reviewed local commit `5aff7205ee3a78659da169988f6d92bb9338ee69`. Each matrix job runs the full unittest suite and compileall. This is hosted Windows execution, not a claim of testing every Windows installation.
+- **Desktop Chromium report review passed.** The actual generated report displays SQL, results, diagnostics, verification/privacy warnings, the producer-environment table and an expandable full receipt. No overlapping content was observed at the tested desktop viewport. Mobile viewports are not verified.
+- **Both comparison harnesses pass.** `benchmarks/compare.py` runs identical SQL/data against Datasette 0.65.2 and optionally the existing Join Key Lab. `benchmarks/handoff.py` asserts all six disclosed handoff conditions. Recorded results are included; these are fictional fixtures, not private data or production-adoption evidence.
+- This documentation cleanup changes no runtime, tests, fixtures, dependencies or workflow. The hosted run above covers the preceding source state; later documentation commits must not be described as that run's tested commit.
 
-Independent review and publication remain the parent task's responsibility. No remote repository, package index or release was created by this task. Public author identity is walker512; no real name, credentials or private source data is included.
+## Functional and security coverage
 
-## Independent audit (2026-11-17)
+The deliberately inflated JOIN returns **90.0**; the corrected EXISTS query returns **60.0**. Both reproduce. Explicit diagnostics predict five pairs and one many-to-many key. Reproduction does not establish business correctness.
 
-A separate reviewer reran all 21 tests, bytecode compilation, and both documented CLI create/verify workflows. Inflated JOIN returns 90.0 with 5 predicted pairs / 1 many-to-many key; corrected EXISTS returns 60.0. Both reproduce, as intended.
+Tests cover CSV and SQLite round trips, committed WAL backup, leading zeros, LF/CRLF quoted multiline fields, empty strings, invalid CSV, BLOB results, row/payload/time limits, unknown columns and atomic failure cleanup. Tampered receipts, changed databases and rechecksummed incorrect results fail verification. Missing or inconsistent environment/build metadata and live snapshot sidecars fail closed.
 
-Three defects found and fixed before publication:
-- Tables named `l` or `r` conflicted with internal JOIN CTE names. Derived tables now avoid CTE shadowing, with a regression test.
-- The profile's `sqlite_%` pattern excluded legal table names such as `sqliteX`. Exact reserved-prefix filtering now includes these tables.
-- A JSON array/null/scalar receipt crashed with an unhandled traceback. These now fail cleanly with exit code 1.
+Adversarial SQL checks include DELETE, DROP, ATTACH, PRAGMA writes/table functions, extension/file functions, random/clock functions, temporary tables, CTE DELETE, REINDEX, VACUUM, BEGIN and multiple statements. They are denied; original database bytes remain unchanged. HTML-shaped values are escaped and the report has a restrictive CSP. Spreadsheet-formula-shaped values remain inert text in HTML; no CSV/XLSX export or formula-neutralization feature is claimed.
 
-Added adversarial checks for PRAGMA table functions, writable_schema, writefile, temporary tables, CTE DELETE, REINDEX, current_timestamp and unapproved runtime functions. All are denied; original database bytes remain unchanged. HTML-shaped and spreadsheet-formula-shaped output remains escaped inert HTML. There is no CSV/XLSX export, so spreadsheet formula neutralization is not a claimed feature.
+The runtime performs no network requests or uploads. Bundles deliberately contain the full source snapshot, SQL and metadata: they are not anonymized. Limits and progress deadlines are not a hard OS sandbox. Symlink/race attacks by other local processes, native SQLite vulnerabilities and compromised runtimes remain outside the documented threat model. Public author identity is walker512; bundled source/examples contain no real name, credentials or private dataset.
 
-No external requests or upload implementation exists in the runtime. SQL and metadata are deliberately not anonymized; full snapshots require an explicit privacy review before sharing. Fixed verifier filenames prevent receipt-controlled path selection, but symlinks/filesystem races and hostile native SQLite vulnerabilities are not sandboxed. Public package/license identity is walker512; bundled fixtures are fictional.
+## Competitive finding and limits
 
-This is a local CLI/evidence tool, not an interactive SQL editor or automatic data-quality inference engine. The report is explicitly labeled unverified until CLI recomputation. No production adoption or competitive performance advantage has been established. Browser visual QA and hosted matrix CI remain separate gates; the static security and CLI audit does not claim those passed.
+The independent handoff exercise demonstrates a narrow benefit: the integrated verifier detects changed snapshot bytes even when the query answer remains unchanged, and returns a structured failure stage plus recovery guidance. The disclosed Datasette JSON/database/version handoff misses this condition. The **stronger manual SHA-256 control also detects it**, and is included rather than hidden.
 
-The independent browser attempt also did not reach report rendering: the cloud browser disallowed the `file:` protocol, and a separate preview-terminal attempt failed with an ambiguous native-window identity before starting an HTTP server. Desktop input was released to avoid interference with other work. This is an environment limitation, not a passed visual inspection.
+This is a packaged workflow improvement, not an exclusive algorithm or proof of superior SQL accuracy, security, speed, human usability, adoption, or superiority over Datasette's plugin ecosystem. Join Key Lab has richer normalization and cardinality-contract features. See [the full comparison](COMPARISON.md).
 
-### Browser follow-up: passed desktop rendering
+The SQLite version-mismatch case uses deliberately altered metadata; it does not execute two different SQLite runtimes. Matching version/build metadata does not guarantee universal cross-platform portability. Receipts are checksummed, not signed; an adversary who changes both data and receipt can create a different valid bundle.
 
-After coordinated exclusive desktop access, the reviewer served only the fictional generated HTML from a shared QA directory on loopback port 8883. Chromium rendered the real report successfully: readable heading and verification warning, SQL, result/profile contents, full JOIN diagnostics, and native expanded machine-readable receipt. Screenshots showed no overlapping content at the tested desktop viewport. This supersedes the earlier blocked attempt for **desktop report rendering only**; mobile viewport coverage and hosted/Windows CI are still not claimed.
+## Review history (superseded intermediate states)
 
-### Comparative release gate
+1. Initial implementation passed 16 tests. Independent review found and fixed JOIN CTE alias collisions with tables named `l`/`r`, incorrect filtering of legal `sqliteX` table names, and crashes on scalar/array receipts. Expanded suite: 21 tests.
+2. Initial browser attempts were blocked by execution/preview limitations. A later loopback preview successfully rendered the real report, superseding the earlier unverified visual state.
+3. The initial competition review withheld approval because mere feature existence did not prove an advantage. Version 0.2.0 added failure-stage diagnostics and the explicit six-case handoff comparison with its stronger manual control.
+4. The 32-test 0.2.0 submission had a build-verification gap: a rechecksummed empty environment object could be accepted. Required typed fields, consistent version fields and rejection of unknown environment fields closed it. Independent suite: 35 tests. New environment HTML then passed desktop visual review.
+5. [Initial hosted run 43996609514](https://github.com/walker512/queryproof-candidate/actions/runs/43996609514) found one Windows fixture issue: text-mode output translated embedded LF to CRLF, but the test expected LF. The fix writes explicit LF bytes and adds a separate CRLF-preservation test; it does not weaken the assertion or change runtime code. The resulting 36-test matrix passed in the successful run linked above.
 
-Independent same-input execution against default Datasette 0.65.2 and the existing Join Key Lab is recorded in `benchmarks/results.json`, with a rerunnable harness. Both competitors match the overlapping arithmetic/readonly behaviors; Join Key Lab has richer normalization and contract diagnostics. QueryProof demonstrates a packaged offline evidence/recomputation workflow, not broad superiority. Competitive-superiority release approval is withheld pending concrete evidence under that stronger user requirement. This does not invalidate the passed functional/security checks.
+Runtime SHA-256 after review and the Windows fixture fix:
+`f953f9d48e671a64eb25f0bac45590815b1c3666877a49e930376036e75654b1`
 
-## 0.2.0 handoff diagnostics verification
-
-- 32 unit tests passed after the diagnostic/environment changes; compileall passed for application and benchmark scripts.
-- Original same-fixture Datasette/Join Key Lab benchmark rerun successfully; `benchmarks/results.json` refreshed.
-- `benchmarks/handoff.py` executed with installed Datasette 0.65.2; all six asserted scenarios passed, full observed results in `benchmarks/handoff-results.json`.
-- Outcomes: intact verified; edited answer rejected by receipt checksum; both old-database variants rejected by snapshot checksum; omitted SQL rejected with an actionable missing-query code; simulated version mismatch rejected with recorded/current runtime details.
-- Stronger manual control with a supplied SHA-256 also detected the same-answer old database. This is explicitly reported, not hidden.
-- Eleven added unit tests cover structured success, missing receipt/SQL/snapshot, version/build mismatch guidance, informational Python metadata differences, snapshot sidecars, exact differing evidence section, malformed environment and tool-version mismatch.
-- Version mismatch is deliberately injected metadata, not an executed second SQLite version. No cross-version reliability, speed, human usability or adoption result is claimed.
-- HTML now includes a producer-environment section; this change still needs independent visual review. No remote publication performed.
-
-### Independent 0.2.0 re-review
-
-The reviewer reran the 32-test submission and both comparison harnesses, then found a fail-open in the new build-validation gate: an empty environment object with a recomputed receipt checksum was accepted as VERIFIED. The fix requires a complete, typed environment record consistent with both recorded version fields; unknown fields are rejected rather than echoed into diagnostic errors. Three additional tests cover missing build fields, unexpected sensitive fields, and inconsistent versions. **All 35 tests now pass**, as do compileall, the real CLI create → JSON verify workflow, the same-input comparison and all six handoff cases. Benchmark JSON outputs were regenerated from this final reviewed code.
-
-The six-case exercise establishes one narrow benefit: out-of-the-box exact-snapshot identity validation detects a changed database even when the query answer is unchanged, alongside structured recovery guidance. The disclosed Datasette JSON/database/version handoff misses that condition, while the explicitly tested stronger manual hash control catches it. No claim of an exclusive algorithm, superior SQL accuracy, greater security than Datasette, shorter completion time, lower human error, or plugin-ecosystem superiority follows. The pinned competitor version and synthetic version-mismatch injection remain explicit limitations.
-
-Functional/security readiness is approved for the documented local-tool threat model. The specific handoff advantage is now independently reproduced. Universal superiority is not established; release claims must stay within this tested scope, and hosted/Windows CI remains unverified. This reviewer did not publish.
-
-### Final 0.2.0 HTML review
-
-The independent reviewer regenerated a real corrected-query bundle with 0.2.0, verified it through `verify --json`, and rendered its report in Chromium. The new Producer environment section displays the tool version, Python implementation/version, OS, architecture and SQLite version/source ID in readable table columns. The full receipt expands and exposes recorded compile options; the portability warning remains explicit. Desktop screenshot and accessibility checks passed. No mobile-viewport or Windows execution claim is implied. Runtime source and tests were frozen for separate Windows verification; final local suite remains 35/35 passing.
+No claim of publication is made by this validation record. Nonblocking hosted warnings concerned action runtime deprecation/runner-label migration; they are not product test failures.
