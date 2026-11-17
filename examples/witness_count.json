@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "table": "sales",
+  "mode": "count",
+  "project": [],
+  "filters": [{"column": "customer", "op": "eq", "literal": {"type": "text", "value": "a"}}],
+  "order": [],
+  "limit": null,
+  "offset": null
+}
