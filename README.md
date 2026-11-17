@@ -96,3 +96,11 @@ Produces a stable `code`, first failed `stage`, diagnosis and `remedy`, with exi
 The receipt also records Python version/implementation, OS and architecture, but no hostname, username, paths or environment variables. Python/OS differences are informational and noted after a successful verification; SQLite version/source/build differences fail closed. These metadata help locate mismatches, **not guarantee cross-platform or cross-version behavior**. First failure does not mean all later checks passed.
 
 [Same-data handoff exercise](COMPARISON.md#handoff-fault-exercise-020) compares actual outcomes with a disclosed Datasette export/manual-review recipe, including a stronger manual checksum control that closes the snapshot-identity gap.
+
+## Optional single-table source witnesses (distribution 0.3.0)
+
+[Source witnesses](docs/SOURCE_WITNESSES.md) link a bounded typed projection or COUNT(*) to exact snapshot-local row locators and full source values. Duplicate projected rows stay distinct; paged results report omitted matching rows, while COUNT requires the complete bounded source set. It uses explicit structured specs, not arbitrary SQL parsing, and rejects unsupported table/query forms. Try `python -m queryproof_witness run --csv sales=examples/sales.csv --spec examples/witness_rows.json --out private-witness`, then `python -m queryproof_witness verify private-witness`.
+
+The old `queryproof.py`, its 0.2.0 receipts and all 36 original tests are unchanged. The new installed entry point is `queryproof-witness`; it does not inherit old hosted-CI/browser acceptance merely by sharing this repository. Both modes include a complete sensitive database snapshot and perform no upload.
+
+Witness increment validation: **67 local tests passed, zero skips** (36 original + 31 new), plus offline wheel installation and both installed commands exercised outside the source checkout. See [the separate validation scope](docs/SOURCE_WITNESSES.md#executed-verification-for-this-increment); old hosted/browser acceptance does not imply new-mode acceptance.

@@ -38,3 +38,7 @@ Runtime SHA-256 after review and the Windows fixture fix:
 `f953f9d48e671a64eb25f0bac45590815b1c3666877a49e930376036e75654b1`
 
 No claim of publication is made by this validation record. Nonblocking hosted warnings concerned action runtime deprecation/runner-label migration; they are not product test failures.
+
+## Separate 0.3.0 single-table witness increment
+
+The distribution now also installs `queryproof-witness`; the preceding 0.2.0 hosted-CI/browser observations do not cover this new module. Local verification: **67 tests passed, zero skips** on Linux/Python 3.12 / SQLite 3.53.1 (original 36 tests unchanged + 31 witness tests). A locally built, offline-installed wheel was exercised from outside the checkout in a new virtual environment: rows and COUNT bundles, their verification, and unchanged legacy CSV receipt → snapshot → new witness all ran. See [SOURCE_WITNESSES.md](docs/SOURCE_WITNESSES.md) for precise source-row evidence, limits and non-authentication boundaries. No new browser/Windows/macOS/hosted-CI or competitor claim is made.
