@@ -63,11 +63,19 @@ class QueryProofTests(unittest.TestCase):
         self.assertIn('&lt;script&gt;',page)
     def test_csv(self):
         source=self.root/'source.csv'
-        source.write_text('id,note\n001,"line1\nline2"\n2,\n',encoding='utf-8')
+        # Explicit bytes prevent Windows text I/O from translating this LF fixture.
+        source.write_bytes(b'id,note\n001,"line1\nline2"\n2,\n')
         dest=self.root/'csv.sqlite'
         q.snapshot(dest,csvs=[('weird"name',source)])
         r=q.execute(dest,'SELECT * FROM "weird""name" ORDER BY id')
         self.assertEqual(r['rows'],[['001','line1\nline2'],['2','']])
+    def test_csv_preserves_crlf_in_quoted_cell(self):
+        source=self.root/'crlf.csv'
+        source.write_bytes(b'id,note\r\n001,"line1\r\nline2"\r\n2,\r\n')
+        dest=self.root/'crlf.sqlite'
+        q.snapshot(dest,csvs=[('data',source)])
+        r=q.execute(dest,'SELECT * FROM data ORDER BY id')
+        self.assertEqual(r['rows'],[['001','line1\r\nline2'],['2','']])
     def test_bad_csv(self):
         for content in ['a,A\n1,2\n','a,b\n1\n','a,b\n"bad,b\n']:
             source=self.root/'bad.csv'; source.write_text(content)
