@@ -1,0 +1,127 @@
+{
+  "datasette_version": "0.65.2",
+  "scope": "Default Datasette without plugins; no overall-superiority claim.",
+  "queries": [
+    {
+      "case": "inflated",
+      "datasette_status": 200,
+      "datasette_rows": [
+        [
+          90.0
+        ]
+      ],
+      "datasette_keys": [
+        "ok",
+        "database",
+        "query_name",
+        "rows",
+        "truncated",
+        "columns",
+        "query",
+        "error",
+        "private",
+        "allow_execute_sql",
+        "query_ms"
+      ],
+      "queryproof_rows": [
+        [
+          90.0
+        ]
+      ],
+      "queryproof_join": [
+        {
+          "left": [
+            "sales",
+            "customer"
+          ],
+          "right": [
+            "labels",
+            "customer"
+          ],
+          "predicted_inner_rows": 5,
+          "many_to_many_keys": 1,
+          "semantics": "Explicit CAST(key AS TEXT) COLLATE BINARY equality; NULL excluded. Not a prediction for arbitrary SQL JOINs."
+        }
+      ],
+      "queryproof_verified": true
+    },
+    {
+      "case": "correct",
+      "datasette_status": 200,
+      "datasette_rows": [
+        [
+          60.0
+        ]
+      ],
+      "datasette_keys": [
+        "ok",
+        "database",
+        "query_name",
+        "rows",
+        "truncated",
+        "columns",
+        "query",
+        "error",
+        "private",
+        "allow_execute_sql",
+        "query_ms"
+      ],
+      "queryproof_rows": [
+        [
+          60.0
+        ]
+      ],
+      "queryproof_join": [
+        {
+          "left": [
+            "sales",
+            "customer"
+          ],
+          "right": [
+            "labels",
+            "customer"
+          ],
+          "predicted_inner_rows": 5,
+          "many_to_many_keys": 1,
+          "semantics": "Explicit CAST(key AS TEXT) COLLATE BINARY equality; NULL excluded. Not a prediction for arbitrary SQL JOINs."
+        }
+      ],
+      "queryproof_verified": true
+    }
+  ],
+  "datasette_delete": {
+    "ok": false,
+    "error": "Statement must be a SELECT",
+    "status": 400,
+    "title": "Invalid SQL"
+  },
+  "join_key_lab": {
+    "engine_sha256": "802594cb3168849fb83e310359425ab33a179514bebd56a6a8a05ef3d1a26706",
+    "exact": {
+      "policy": "exact",
+      "inner": 5,
+      "left": 5,
+      "right": 5,
+      "full": 5,
+      "matched_left": 3,
+      "matched_right": 3,
+      "excluded_left": 0,
+      "excluded_right": 0,
+      "new_pairs": 0,
+      "collapsed_left_groups": 0,
+      "collapsed_right_groups": 0,
+      "many_many_groups": 1,
+      "contract_pass": false,
+      "duplicate_left": true,
+      "duplicate_right": true,
+      "inner_delta": 0
+    },
+    "policies": [
+      "exact",
+      "trim",
+      "casefold",
+      "nfc",
+      "trim+nfc+casefold"
+    ]
+  }
+}

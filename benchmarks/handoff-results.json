@@ -1,0 +1,293 @@
+{
+  "datasette_version": "0.65.2",
+  "queryproof_version": "0.2.0",
+  "environment": {
+    "python_version": "3.12.14",
+    "python_implementation": "CPython",
+    "os": "Linux",
+    "architecture": "x86_64",
+    "sqlite_version": "3.53.1",
+    "sqlite_source_id": "2026-05-05 10:34:17 c88b22011a54b4f6fbd149e9f8e4de77658ce58143a1af0e3785e4e6475127e9",
+    "sqlite_compile_options": [
+      "ATOMIC_INTRINSICS=1",
+      "COMPILER=clang-22.1.3",
+      "DEFAULT_AUTOVACUUM",
+      "DEFAULT_CACHE_SIZE=-2000",
+      "DEFAULT_FILE_FORMAT=4",
+      "DEFAULT_JOURNAL_SIZE_LIMIT=-1",
+      "DEFAULT_MMAP_SIZE=0",
+      "DEFAULT_PAGE_SIZE=4096",
+      "DEFAULT_PCACHE_INITSZ=20",
+      "DEFAULT_RECURSIVE_TRIGGERS",
+      "DEFAULT_SECTOR_SIZE=4096",
+      "DEFAULT_SYNCHRONOUS=2",
+      "DEFAULT_WAL_AUTOCHECKPOINT=1000",
+      "DEFAULT_WAL_SYNCHRONOUS=2",
+      "DEFAULT_WORKER_THREADS=0",
+      "DIRECT_OVERFLOW_READ",
+      "ENABLE_DBSTAT_VTAB",
+      "ENABLE_FTS3",
+      "ENABLE_FTS3_PARENTHESIS",
+      "ENABLE_FTS4",
+      "ENABLE_FTS5",
+      "ENABLE_GEOPOLY",
+      "ENABLE_MATH_FUNCTIONS",
+      "ENABLE_PERCENTILE",
+      "ENABLE_RTREE",
+      "MALLOC_SOFT_LIMIT=1024",
+      "MAX_ATTACHED=10",
+      "MAX_COLUMN=2000",
+      "MAX_COMPOUND_SELECT=500",
+      "MAX_DEFAULT_PAGE_SIZE=8192",
+      "MAX_EXPR_DEPTH=1000",
+      "MAX_FUNCTION_ARG=1000",
+      "MAX_LENGTH=1000000000",
+      "MAX_LIKE_PATTERN_LENGTH=50000",
+      "MAX_MMAP_SIZE=0x7fff0000",
+      "MAX_PAGE_COUNT=0xfffffffe",
+      "MAX_PAGE_SIZE=65536",
+      "MAX_SQL_LENGTH=1000000000",
+      "MAX_TRIGGER_DEPTH=1000",
+      "MAX_VARIABLE_NUMBER=32766",
+      "MAX_VDBE_OP=250000000",
+      "MAX_WORKER_THREADS=8",
+      "MUTEX_PTHREADS",
+      "SYSTEM_MALLOC",
+      "TEMP_STORE=1",
+      "THREADSAFE=1"
+    ],
+    "queryproof_version": "0.2.0"
+  },
+  "fixture": "same sales/labels CSVs and correct.sql; fictional",
+  "baseline": "Datasette default JSON response + SQLite file + separately recorded SQLite version; manual recipe automated for reproducibility, not a built-in Datasette verifier",
+  "not_measured": [
+    "human completion time",
+    "user error rate",
+    "all Datasette plugins",
+    "cross-version compatibility"
+  ],
+  "cases": [
+    {
+      "case": "intact",
+      "queryproof": {
+        "ok": true,
+        "code": "VERIFIED",
+        "stage": "complete",
+        "message": "Snapshot, query result and diagnostics reproduce; this is not proof of correctness or authorship.",
+        "environment_notes": []
+      },
+      "datasette_manual_recipe": {
+        "status": "RESULT_MATCH",
+        "detected": false,
+        "step": "Rerun SQL via Datasette and compare ordered rows/columns; does not establish snapshot identity"
+      }
+    },
+    {
+      "case": "altered_answer",
+      "queryproof": {
+        "ok": false,
+        "code": "RECEIPT_CHECKSUM",
+        "stage": "receipt",
+        "message": "Receipt checksum mismatch",
+        "remedy": "Re-transfer the original receipt. Do not re-sign edited JSON to suppress this warning.",
+        "details": {}
+      },
+      "datasette_manual_recipe": {
+        "status": "RESULT_DIFFERS",
+        "detected": true,
+        "step": "Rerun SQL via Datasette and compare ordered rows/columns; does not establish snapshot identity"
+      }
+    },
+    {
+      "case": "old_database_same_answer",
+      "queryproof": {
+        "ok": false,
+        "code": "SNAPSHOT_CHECKSUM",
+        "stage": "snapshot",
+        "message": "Snapshot checksum mismatch",
+        "remedy": "Use the exact snapshot shipped with this receipt. An old, changed or unrelated database cannot be distinguished from a hash mismatch alone.",
+        "details": {
+          "expected_sha256": "61206a6121387671121ab85cdb1675d1d42eca6cd9dcfd3125bda8c7ccd927ec",
+          "actual_sha256": "9cd20613c8953d08b58553361d54ea562407b0020154a6549c3c725ebc0bf75d"
+        }
+      },
+      "datasette_manual_recipe": {
+        "status": "RESULT_MATCH",
+        "detected": false,
+        "step": "Rerun SQL via Datasette and compare ordered rows/columns; does not establish snapshot identity"
+      }
+    },
+    {
+      "case": "old_database_changed_answer",
+      "queryproof": {
+        "ok": false,
+        "code": "SNAPSHOT_CHECKSUM",
+        "stage": "snapshot",
+        "message": "Snapshot checksum mismatch",
+        "remedy": "Use the exact snapshot shipped with this receipt. An old, changed or unrelated database cannot be distinguished from a hash mismatch alone.",
+        "details": {
+          "expected_sha256": "61206a6121387671121ab85cdb1675d1d42eca6cd9dcfd3125bda8c7ccd927ec",
+          "actual_sha256": "38886b73b4f185a4a802f43460fbb19b5825845b1757bf677c11f22a8c04156f"
+        }
+      },
+      "datasette_manual_recipe": {
+        "status": "RESULT_DIFFERS",
+        "detected": true,
+        "step": "Rerun SQL via Datasette and compare ordered rows/columns; does not establish snapshot identity"
+      }
+    },
+    {
+      "case": "missing_sql",
+      "queryproof": {
+        "ok": false,
+        "code": "SQL_MISSING",
+        "stage": "receipt",
+        "message": "Exact SQL is missing; receipt integrity cannot be established",
+        "remedy": "Request the complete original bundle. Do not reconstruct SQL from an answer or patch its checksum.",
+        "details": {}
+      },
+      "datasette_manual_recipe": {
+        "status": "SQL_MISSING",
+        "detected": true,
+        "step": "Inspect response.query.sql"
+      }
+    },
+    {
+      "case": "sqlite_version_mismatch",
+      "queryproof": {
+        "ok": false,
+        "code": "SQLITE_VERSION",
+        "stage": "environment",
+        "message": "SQLite runtime differs; reproduce with the recorded version",
+        "remedy": "Use an isolated Python environment built with the recorded SQLite version. Changing Python alone does not guarantee that SQLite version. Do not edit the receipt; if unavailable, ask the producer to regenerate and label a new bundle.",
+        "details": {
+          "expected": "0.0.0-test-fixture",
+          "actual": "3.53.1",
+          "recorded_environment": {
+            "python_version": "3.12.14",
+            "python_implementation": "CPython",
+            "os": "Linux",
+            "architecture": "x86_64",
+            "sqlite_version": "0.0.0-test-fixture",
+            "sqlite_source_id": "2026-05-05 10:34:17 c88b22011a54b4f6fbd149e9f8e4de77658ce58143a1af0e3785e4e6475127e9",
+            "sqlite_compile_options": [
+              "ATOMIC_INTRINSICS=1",
+              "COMPILER=clang-22.1.3",
+              "DEFAULT_AUTOVACUUM",
+              "DEFAULT_CACHE_SIZE=-2000",
+              "DEFAULT_FILE_FORMAT=4",
+              "DEFAULT_JOURNAL_SIZE_LIMIT=-1",
+              "DEFAULT_MMAP_SIZE=0",
+              "DEFAULT_PAGE_SIZE=4096",
+              "DEFAULT_PCACHE_INITSZ=20",
+              "DEFAULT_RECURSIVE_TRIGGERS",
+              "DEFAULT_SECTOR_SIZE=4096",
+              "DEFAULT_SYNCHRONOUS=2",
+              "DEFAULT_WAL_AUTOCHECKPOINT=1000",
+              "DEFAULT_WAL_SYNCHRONOUS=2",
+              "DEFAULT_WORKER_THREADS=0",
+              "DIRECT_OVERFLOW_READ",
+              "ENABLE_DBSTAT_VTAB",
+              "ENABLE_FTS3",
+              "ENABLE_FTS3_PARENTHESIS",
+              "ENABLE_FTS4",
+              "ENABLE_FTS5",
+              "ENABLE_GEOPOLY",
+              "ENABLE_MATH_FUNCTIONS",
+              "ENABLE_PERCENTILE",
+              "ENABLE_RTREE",
+              "MALLOC_SOFT_LIMIT=1024",
+              "MAX_ATTACHED=10",
+              "MAX_COLUMN=2000",
+              "MAX_COMPOUND_SELECT=500",
+              "MAX_DEFAULT_PAGE_SIZE=8192",
+              "MAX_EXPR_DEPTH=1000",
+              "MAX_FUNCTION_ARG=1000",
+              "MAX_LENGTH=1000000000",
+              "MAX_LIKE_PATTERN_LENGTH=50000",
+              "MAX_MMAP_SIZE=0x7fff0000",
+              "MAX_PAGE_COUNT=0xfffffffe",
+              "MAX_PAGE_SIZE=65536",
+              "MAX_SQL_LENGTH=1000000000",
+              "MAX_TRIGGER_DEPTH=1000",
+              "MAX_VARIABLE_NUMBER=32766",
+              "MAX_VDBE_OP=250000000",
+              "MAX_WORKER_THREADS=8",
+              "MUTEX_PTHREADS",
+              "SYSTEM_MALLOC",
+              "TEMP_STORE=1",
+              "THREADSAFE=1"
+            ],
+            "queryproof_version": "0.2.0"
+          },
+          "current_environment": {
+            "python_version": "3.12.14",
+            "python_implementation": "CPython",
+            "os": "Linux",
+            "architecture": "x86_64",
+            "sqlite_version": "3.53.1",
+            "sqlite_source_id": "2026-05-05 10:34:17 c88b22011a54b4f6fbd149e9f8e4de77658ce58143a1af0e3785e4e6475127e9",
+            "sqlite_compile_options": [
+              "ATOMIC_INTRINSICS=1",
+              "COMPILER=clang-22.1.3",
+              "DEFAULT_AUTOVACUUM",
+              "DEFAULT_CACHE_SIZE=-2000",
+              "DEFAULT_FILE_FORMAT=4",
+              "DEFAULT_JOURNAL_SIZE_LIMIT=-1",
+              "DEFAULT_MMAP_SIZE=0",
+              "DEFAULT_PAGE_SIZE=4096",
+              "DEFAULT_PCACHE_INITSZ=20",
+              "DEFAULT_RECURSIVE_TRIGGERS",
+              "DEFAULT_SECTOR_SIZE=4096",
+              "DEFAULT_SYNCHRONOUS=2",
+              "DEFAULT_WAL_AUTOCHECKPOINT=1000",
+              "DEFAULT_WAL_SYNCHRONOUS=2",
+              "DEFAULT_WORKER_THREADS=0",
+              "DIRECT_OVERFLOW_READ",
+              "ENABLE_DBSTAT_VTAB",
+              "ENABLE_FTS3",
+              "ENABLE_FTS3_PARENTHESIS",
+              "ENABLE_FTS4",
+              "ENABLE_FTS5",
+              "ENABLE_GEOPOLY",
+              "ENABLE_MATH_FUNCTIONS",
+              "ENABLE_PERCENTILE",
+              "ENABLE_RTREE",
+              "MALLOC_SOFT_LIMIT=1024",
+              "MAX_ATTACHED=10",
+              "MAX_COLUMN=2000",
+              "MAX_COMPOUND_SELECT=500",
+              "MAX_DEFAULT_PAGE_SIZE=8192",
+              "MAX_EXPR_DEPTH=1000",
+              "MAX_FUNCTION_ARG=1000",
+              "MAX_LENGTH=1000000000",
+              "MAX_LIKE_PATTERN_LENGTH=50000",
+              "MAX_MMAP_SIZE=0x7fff0000",
+              "MAX_PAGE_COUNT=0xfffffffe",
+              "MAX_PAGE_SIZE=65536",
+              "MAX_SQL_LENGTH=1000000000",
+              "MAX_TRIGGER_DEPTH=1000",
+              "MAX_VARIABLE_NUMBER=32766",
+              "MAX_VDBE_OP=250000000",
+              "MAX_WORKER_THREADS=8",
+              "MUTEX_PTHREADS",
+              "SYSTEM_MALLOC",
+              "TEMP_STORE=1",
+              "THREADSAFE=1"
+            ],
+            "queryproof_version": "0.2.0"
+          }
+        }
+      },
+      "datasette_manual_recipe": {
+        "status": "SQLITE_VERSION",
+        "detected": true,
+        "step": "Compare separately recorded SQLite version with receiver runtime"
+      }
+    }
+  ],
+  "manual_digest_control": {
+    "provided_digest_matches_changed_database": false,
+    "conclusion": "Adding and checking a producer database hash also detects this identity mismatch. QueryProof packages that check; it does not invent hashing."
+  }
+}
