@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "table": "sales",
+  "group_by": ["region"],
+  "aggregates": [
+    {"as": "all_sales", "op": "count_all", "column": null},
+    {"as": "known_amounts", "op": "count", "column": "amount"},
+    {"as": "total_amount", "op": "sum_integer", "column": "amount"}
+  ],
+  "filters": []
+}
