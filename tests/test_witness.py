@@ -1,6 +1,7 @@
 """Original synthetic SQLite tables; no business/private data."""
 import copy,json,os,shutil,sqlite3,subprocess,sys,tempfile,unittest
 from pathlib import Path
+from contextlib import closing
 from unittest.mock import patch
 import queryproof_witness as w
 ROOT=Path(__file__).resolve().parents[1]
@@ -11,7 +12,7 @@ def pred(column,op,kind=None,value=None):return {'column':column,'op':op,'litera
 class WitnessTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.p=Path(self.tmp.name);self.db=self.p/'source.sqlite';self.n=0
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('CREATE TABLE items(label TEXT, value, note TEXT COLLATE NOCASE)')
             c.executemany('INSERT INTO items VALUES(?,?,?)',[('duplicate',1,'A'),('duplicate',1.0,'a'),('',None,''),('blob',b'\x00\xff',None),('text','1','B')])
     def run_it(self,s=None,csvs=()):
@@ -37,31 +38,31 @@ class WitnessTests(unittest.TestCase):
         out,e,_=self.run_it(count());self.assertEqual(e['result_rows'],[[w.typed(5)]]);self.assertEqual(len(e['witnesses']),5);self.assertEqual(e['matching_rows_not_included'],0);w.verify(out)
         s=count();s['filters']=[pred('label','eq','text','absent')];_,e,_=self.run_it(s);self.assertEqual(e['result_rows'],[[w.typed(0)]]);self.assertEqual(e['witnesses'],[])
     def test_composite_without_rowid(self):
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('CREATE TABLE keyed(a TEXT,b INTEGER,value TEXT,PRIMARY KEY(a,b)) WITHOUT ROWID');c.executemany('INSERT INTO keyed VALUES(?,?,?)',[('b',1,'same'),('a',2,'same'),('a',1,'same')])
         out,e,_=self.run_it(rows('keyed',['value']));self.assertEqual(e['source_schema']['locator'],{'kind':'primary_key','columns':['a','b']});self.assertEqual([x['locator']['values'] for x in e['witnesses']],[[w.typed('a'),w.typed(1)],[w.typed('a'),w.typed(2)],[w.typed('b'),w.typed(1)]]);w.verify(out)
     def test_rowid_alias_shadowing(self):
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('CREATE TABLE partial("RoWiD" TEXT,value INTEGER)');c.execute("INSERT INTO partial VALUES('not-locator',9)");c.execute('CREATE TABLE full(rowid,_rowid_,oid)');c.execute('INSERT INTO full VALUES(1,2,3)')
         _,e,_=self.run_it(rows('partial',['RoWiD']));self.assertEqual(e['source_schema']['locator']['alias'],'_rowid_');self.assertEqual(e['witnesses'][0]['locator']['values'],[w.typed(1)])
         with self.assertRaises(ValueError):self.run_it(rows('full',['rowid']))
     def test_view_virtual_generated_rejected(self):
-        with sqlite3.connect(self.db) as c:
+        with closing(sqlite3.connect(self.db)) as c, c:
             c.execute('CREATE VIEW v AS SELECT * FROM items');c.execute('CREATE TABLE generated(x INT,y INT GENERATED ALWAYS AS (x+1))');c.execute('CREATE VIRTUAL TABLE virtual USING fts5(value)')
         for table,col in (('v','label'),('generated','x'),('virtual','value'),('virtual_data','id')):
             with self.assertRaises(ValueError):self.run_it(rows(table,[col]))
     def test_identifier_quotes_and_html_inert(self):
-        with sqlite3.connect(self.db) as c:c.execute('CREATE TABLE "odd\"\"table" ("<script>" TEXT)');c.execute('INSERT INTO "odd\"\"table" VALUES(?)',('<img src=x onerror=alert(1)>',))
+        with closing(sqlite3.connect(self.db)) as c, c:c.execute('CREATE TABLE "odd\"\"table" ("<script>" TEXT)');c.execute('INSERT INTO "odd\"\"table" VALUES(?)',('<img src=x onerror=alert(1)>',))
         out,e,_=self.run_it(rows('odd"table',['<script>']));h=(out/'report.html').read_text();self.assertIn('&lt;script&gt;',h);self.assertNotIn('<img',h);self.assertIn("default-src 'none'",h);w.verify(out)
     def test_nonfinite_data_rejected(self):
-        with sqlite3.connect(self.db) as c:c.execute('INSERT INTO items VALUES(?,?,?)',('infinite',float('inf'),None))
+        with closing(sqlite3.connect(self.db)) as c, c:c.execute('INSERT INTO items VALUES(?,?,?)',('infinite',float('inf'),None))
         with self.assertRaises(ValueError):self.run_it()
     def test_count_limit_rows_page_does_not_truncate_silently(self):
-        with sqlite3.connect(self.db) as c:c.execute('CREATE TABLE many(x)');c.executemany('INSERT INTO many VALUES(?)',((i,) for i in range(10001)))
+        with closing(sqlite3.connect(self.db)) as c, c:c.execute('CREATE TABLE many(x)');c.executemany('INSERT INTO many VALUES(?)',((i,) for i in range(10001)))
         with self.assertRaises(ValueError):self.run_it(count('many'))
         s=rows('many',['x']);s['limit']=2;_,e,_=self.run_it(s);self.assertEqual(e['matched_rows'],10001);self.assertEqual(e['matching_rows_not_included'],9999)
     def test_evidence_size_limit_and_no_published_output(self):
-        with sqlite3.connect(self.db) as c:c.execute('CREATE TABLE big(v)');c.executemany('INSERT INTO big VALUES(?)',[(b'x'*900000,)]*5)
+        with closing(sqlite3.connect(self.db)) as c, c:c.execute('CREATE TABLE big(v)');c.executemany('INSERT INTO big VALUES(?)',[(b'x'*900000,)]*5)
         with self.assertRaises(ValueError):self.run_it(rows('big',['v']))
         self.assertFalse((self.p/'out1').exists())
     def test_live_committed_wal(self):
@@ -83,12 +84,18 @@ class WitnessTests(unittest.TestCase):
         out,_,_=self.run_it();r=w.parse((out/'receipt.json').read_bytes());r['environment']['sqlite_source_id']='different';r['receipt_sha256']=w.sha(w.canon({k:v for k,v in r.items() if k!='receipt_sha256'}));(out/'receipt.json').write_bytes(w.canon(r))
         with self.assertRaises(ValueError):w.verify(out)
     def test_special_files_and_existing_output(self):
-        spec=self.p/'s.json';spec.write_bytes(w.canon(rows()));link=self.p/'link';link.symlink_to(self.db)
+        spec=self.p/'s.json';spec.write_bytes(w.canon(rows()))
+        (self.p/'out').mkdir()
+        with self.assertRaises(ValueError):w.create(self.p/'out',spec,self.db)
+    def test_symlink_input_rejected(self):
+        spec=self.p/'s.json';spec.write_bytes(w.canon(rows()));link=self.p/'link'
+        try:link.symlink_to(self.db)
+        except (OSError,NotImplementedError):self.skipTest('Symlink unavailable on this platform')
         with self.assertRaises(ValueError):w.create(self.p/'out',spec,link)
-        spec.unlink();os.mkfifo(spec)
-        with self.assertRaises(ValueError):w.create(self.p/'out',spec,self.db)
-        spec.unlink();spec.write_bytes(w.canon(rows()));(self.p/'out').mkdir()
-        with self.assertRaises(ValueError):w.create(self.p/'out',spec,self.db)
+    @unittest.skipUnless(hasattr(os,'mkfifo'),'FIFO unavailable on this platform')
+    def test_fifo_input_rejected(self):
+        f=self.p/'fifo';os.mkfifo(f)
+        with self.assertRaises(ValueError):w.create(self.p/'out',f,self.db)
     def test_atomic_failure_no_partial_publication(self):
         spec=self.p/'s.json';spec.write_bytes(w.canon(rows()))
         with patch.object(w,'products',side_effect=ValueError('synthetic serialization failure')):
@@ -98,10 +105,10 @@ class WitnessTests(unittest.TestCase):
         with patch.object(sqlite3,'sqlite_version_info',(3,36,0)):
             with self.assertRaises(ValueError):self.run_it()
     def test_invalid_text_data_rejected(self):
-        with sqlite3.connect(self.db) as c:c.execute("INSERT INTO items VALUES(CAST(X'ff' AS TEXT),1,'invalid utf8')")
+        with closing(sqlite3.connect(self.db)) as c, c:c.execute("INSERT INTO items VALUES(CAST(X'ff' AS TEXT),1,'invalid utf8')")
         with self.assertRaises(sqlite3.Error):self.run_it()
     def test_multiple_predicates_and_integer_endpoints(self):
-        with sqlite3.connect(self.db) as c:c.executemany('INSERT INTO items VALUES(?,?,?)',[('minimum',-2**63,None),('maximum',2**63-1,None)])
+        with closing(sqlite3.connect(self.db)) as c, c:c.executemany('INSERT INTO items VALUES(?,?,?)',[('minimum',-2**63,None),('maximum',2**63-1,None)])
         for value in (-2**63,2**63-1):
             s=rows(project=['value']);s['filters']=[pred('value','ge','integer',value),pred('value','le','integer',value)];out,e,_=self.run_it(s);self.assertEqual(e['result_rows'],[[w.typed(value)]]);w.verify(out)
     def test_all_output_preflight_before_publication(self):
