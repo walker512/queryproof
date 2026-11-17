@@ -1,0 +1,285 @@
+"""Complete typed group contributors for bounded COUNT and integer SUM, not arbitrary SQL lineage."""
+import argparse
+from contextlib import closing
+import csv
+import html
+import json
+from pathlib import Path
+import re
+import sqlite3
+import sys
+import tempfile
+import time
+import queryproof as legacy
+import queryproof_witness as w
+
+VERSION = '0.4.0'
+FILES = {'snapshot.sqlite', 'spec.json', 'queries.json', 'groups.json', 'receipt.json', 'report.html'}
+MAX_GROUPS = 1000
+
+
+def spec(raw):
+    s = w.parse(raw)
+    w.exact(s, ('schema', 'table', 'group_by', 'aggregates', 'filters'))
+    w.integer(s['schema'], 1, 1)
+    w.text(s['table'])
+    if type(s['group_by']) is not list or len(s['group_by']) > 8:
+        raise w.Invalid('At most eight grouping columns.')
+    for col in s['group_by']:
+        w.text(col)
+    if len(set(s['group_by'])) != len(s['group_by']):
+        raise w.Invalid('Duplicate grouping columns.')
+    if type(s['aggregates']) is not list or not 1 <= len(s['aggregates']) <= 16:
+        raise w.Invalid('Expected 1..16 aggregates.')
+    aliases = set(s['group_by'])
+    for agg in s['aggregates']:
+        w.exact(agg, ('as', 'op', 'column'))
+        w.text(agg['as'])
+        if agg['as'] in aliases:
+            raise w.Invalid('Aggregate aliases must be unique and not group names.')
+        aliases.add(agg['as'])
+        if agg['op'] not in ('count_all', 'count', 'sum_integer'):
+            raise w.Invalid('Only COUNT(*), COUNT(column), strict integer SUM supported.')
+        if agg['op'] == 'count_all':
+            if agg['column'] is not None:
+                raise w.Invalid('COUNT(*) column must be null.')
+        else:
+            w.text(agg['column'])
+    w.spec(w.canon(count_spec(s)))
+    return s
+
+
+def count_spec(s):
+    return {'schema': 1, 'table': s['table'], 'mode': 'count', 'project': [],
+            'filters': s['filters'], 'order': [], 'limit': None, 'offset': None}
+
+
+def group_value(value):
+    # SQLite groups real +0.0 and -0.0 together. Source rows retain exact values.
+    if value['type'] == 'real' and float.fromhex(value['value']) == 0:
+        return w.typed(0.0)
+    return value
+
+
+def compute(database, s):
+    qs, base = w.compute(database, count_spec(s))
+    columns = base['source_schema']['columns']
+    wanted = s['group_by'] + [a['column'] for a in s['aggregates'] if a['column'] is not None]
+    if any(col not in columns for col in wanted):
+        raise w.Invalid('Unknown exact grouping/aggregate column.')
+    positions = [columns.index(col) for col in s['group_by']]
+    grouped = {}
+    if not positions:
+        grouped[w.canon([])] = {'key': [], 'ordinals': []}
+    for row in base['witnesses']:
+        key = [group_value(row['source_values'][i]) for i in positions]
+        serial = w.canon(key)
+        grouped.setdefault(serial, {'key': key, 'ordinals': []})['ordinals'].append(row['ordinal'])
+        if len(grouped) > MAX_GROUPS:
+            raise w.Invalid('More than 1000 groups; narrow the explicit filters.')
+    groups = []
+    for serial, entry in sorted(grouped.items()):
+        aggregates = []
+        for agg in s['aggregates']:
+            if agg['op'] == 'count_all':
+                included = entry['ordinals'][:]
+                excluded = []
+                value = w.typed(len(included))
+            else:
+                pos = columns.index(agg['column'])
+                included = [i for i in entry['ordinals'] if base['witnesses'][i]['source_values'][pos]['type'] != 'null']
+                excluded = [i for i in entry['ordinals'] if base['witnesses'][i]['source_values'][pos]['type'] == 'null']
+                if agg['op'] == 'count':
+                    value = w.typed(len(included))
+                else:
+                    values = [base['witnesses'][i]['source_values'][pos] for i in included]
+                    if any(v['type'] != 'integer' for v in values):
+                        raise w.Invalid('SUM requires actual integer storage or NULL, without coercion.')
+                    total = sum(v['value'] for v in values)
+                    if not -2**63 <= total <= 2**63 - 1:
+                        raise w.Invalid('SUM exceeds SQLite signed integer range.')
+                    value = w.typed(total if values else None)
+            aggregates.append({'as': agg['as'], 'op': agg['op'], 'column': agg['column'],
+                               'value': value, 'included_ordinals': included, 'null_excluded_ordinals': excluded})
+        groups.append({'key': entry['key'], 'source_ordinals': entry['ordinals'], 'aggregates': aggregates})
+    q = lambda col: 't.' + legacy.qi(col)
+    key_exprs = [expr for col in s['group_by'] for expr in ('typeof(' + q(col) + ')', '(+' + q(col) + ') COLLATE BINARY')]
+    projections = key_exprs + [('COUNT(*)' if a['op'] == 'count_all' else ('COUNT' if a['op'] == 'count' else 'SUM') + '(' + q(a['column']) + ')') + ' AS ' + legacy.qi(a['as']) for a in s['aggregates']]
+    # Reuse only the WHERE clause generated by the existing strict spec compiler.
+    suffix = qs['matched_count_sql'][len('SELECT COUNT(*)'):]
+    sql = 'SELECT ' + ', '.join(projections) + suffix + (' GROUP BY ' + ', '.join(key_exprs) if key_exprs else '')
+    params = [w.literal(v) for v in qs['filter_parameters']]
+    result = {}
+    with closing(legacy.connect(database)) as con:
+        deadline = time.monotonic() + 2
+        con.set_progress_handler(lambda: int(time.monotonic() > deadline), 1000)
+        def authorize(action, a, b, db, trigger):
+            if action == sqlite3.SQLITE_SELECT:
+                return sqlite3.SQLITE_OK
+            if action == sqlite3.SQLITE_READ and a == s['table'] and (db == 'main' or (db is None and b == '')):
+                return sqlite3.SQLITE_OK
+            if action == sqlite3.SQLITE_FUNCTION and (b or '').lower() in ('count', 'sum', 'typeof'):
+                return sqlite3.SQLITE_OK
+            return sqlite3.SQLITE_DENY
+        con.set_authorizer(authorize)
+        for row in con.execute(sql, params):
+            keys = []
+            for i in range(len(positions)):
+                value = w.typed(row[2*i+1])
+                if value['type'] != row[2*i]:
+                    raise w.Invalid('SQLite group storage class mismatch.')
+                keys.append(group_value(value))
+            key = w.canon(keys)
+            if key in result:
+                raise w.Invalid('Ambiguous SQLite groups.')
+            result[key] = [w.typed(v) for v in row[2*len(positions):]]
+            if len(result) > MAX_GROUPS:
+                raise w.Invalid('SQL group limit exceeded.')
+    derived = {w.canon(g['key']): [a['value'] for a in g['aggregates']] for g in groups}
+    if result != derived:
+        raise w.Invalid('SQL aggregates differ from complete source-derived contributors.')
+    value_counts = {}
+    for row in base['witnesses']:
+        key = w.canon(row['source_values'])
+        value_counts[key] = value_counts.get(key, 0) + 1
+    evidence = {'schema': 1, 'source_schema': base['source_schema'], 'group_columns': s['group_by'],
+                'matched_rows': base['matched_rows'], 'included_source_rows': len(base['witnesses']),
+                'matching_rows_not_included': 0, 'witnesses': base['witnesses'], 'groups': groups,
+                'duplicate_value_rows_beyond_first': sum(n-1 for n in value_counts.values()),
+                'captured_source_null_empty_diagnostics': base['captured_source_null_empty_diagnostics'],
+                'semantic_correctness_verified': False, 'snapshot_local_locators': True}
+    generated = {'aggregate_sql': sql, 'witness_sql': qs['witness_sql'], 'filter_parameters': qs['filter_parameters'],
+                 'group_semantics': 'Storage classes separate; BINARY text; NULLs together; real signed zeros normalized; canonical typed-key output ordering, not numerical order.',
+                 'source_order_semantics': qs['sort_semantics']}
+    if len(w.canon(evidence)) > w.MAX_EVIDENCE:
+        raise w.Invalid('Complete group contribution evidence exceeds 4 MiB; never truncated.')
+    return generated, evidence
+
+
+def environment():
+    return {**w.environment(), 'groups_version': VERSION}
+
+
+def sources_valid(sources):
+    if type(sources) is not list or not 1 <= len(sources) <= 32:
+        raise w.Invalid('Invalid source descriptions.')
+    names = set()
+    for source in sources:
+        if type(source) is not dict:
+            raise w.Invalid('Invalid source.')
+        if source.get('kind') == 'sqlite':
+            w.exact(source, ('kind', 'note'))
+            if len(sources) != 1 or source['note'] != 'Snapshot is a consistent SQLite backup, including committed WAL data.':
+                raise w.Invalid('Invalid SQLite source.')
+        elif source.get('kind') == 'csv':
+            w.exact(source, ('kind', 'table', 'sha256', 'rows', 'semantics'))
+            w.text(source['table']); w.integer(source['rows'], 0, 100000)
+            if source['table'] in names or type(source['sha256']) is not str or not re.fullmatch('[0-9a-f]{64}', source['sha256']) or source['semantics'] != 'All cells TEXT; empty string is not SQL NULL.':
+                raise w.Invalid('Invalid CSV source.')
+            names.add(source['table'])
+        else:
+            raise w.Invalid('Unknown source kind.')
+
+
+def products(db_hash, raw, sources, queries, evidence, recorded=None):
+    sources_valid(sources)
+    qraw, eraw = w.canon(queries), w.canon(evidence)
+    receipt = {'format': 'queryproof-groups/1', 'version': VERSION, 'snapshot_sha256': db_hash,
+               'spec_sha256': w.sha(raw), 'queries_sha256': w.sha(qraw), 'groups_sha256': w.sha(eraw),
+               'environment': recorded or environment(), 'sources': sources,
+               'limits': {'source_rows': 10000, 'groups': MAX_GROUPS, 'evidence_bytes': w.MAX_EVIDENCE},
+               'scope': 'Explicit single-table typed groups with COUNT and strict integer SUM. Not arbitrary SQL lineage, business truth or authenticated evidence.'}
+    receipt['receipt_sha256'] = w.sha(w.canon(receipt))
+    body = '<h1>Grouped source contributions</h1><p>PRIVATE: complete snapshot and source values. Not business truth or authenticated evidence.</p>'
+    body += '<p>All matching rows included; duplicates retain separate locators. NULL exclusions are explicit for each aggregate.</p>'
+    for title, value in (('Queries and semantics', queries), ('Complete contributor evidence', evidence), ('Receipt', receipt)):
+        body += '<h2>' + title + '</h2><pre>' + html.escape(w.canon(value).decode(), quote=True) + '</pre>'
+    report = ('<!doctype html><html lang="en"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>QueryProof grouped evidence</title><style>body{max-width:1100px;margin:2rem auto;padding:1rem;font:16px system-ui;background:#10202a;color:#def}pre{white-space:pre-wrap;overflow-wrap:anywhere}p{padding:1rem;border:1px solid #b85}</style>' + body + '</html>').encode()
+    files = {'spec.json': raw, 'queries.json': qraw, 'groups.json': eraw, 'receipt.json': w.canon(receipt), 'report.html': report}
+    if any(len(v) > w.MAX_OUTPUT for v in files.values()):
+        raise w.Invalid('Generated file bound exceeded.')
+    return files
+
+
+def create(out, spec_path, database=None, csvs=()):
+    if bool(database) == bool(csvs):
+        raise w.Invalid('Choose exactly SQLite or CSV source.')
+    dest = Path(out)
+    if dest.exists() or dest.is_symlink():
+        raise w.Invalid('Output must not exist.')
+    raw = w.read(spec_path, w.MAX_SPEC); s = spec(raw)
+    if database:
+        w.regular(database, legacy.MAX_FILE)
+    if len(csvs) > 32:
+        raise w.Invalid('At most 32 CSV sources.')
+    for name, path in csvs:
+        w.text(name); w.regular(path, legacy.MAX_FILE)
+    with tempfile.TemporaryDirectory(prefix='.queryproof-groups-', dir=dest.parent) as td:
+        tmp = Path(td); db = tmp / 'snapshot.sqlite'
+        sources = legacy.snapshot(db, database, csvs)
+        with closing(sqlite3.connect(db, timeout=2)) as con:
+            con.execute('PRAGMA trusted_schema=OFF')
+            if con.execute('PRAGMA journal_mode=DELETE').fetchone()[0] != 'delete':
+                raise w.Invalid('Private journal normalization failed.')
+        queries, evidence = compute(db, s)
+        outputs = products(w.sha(w.read(db, legacy.MAX_FILE)), raw, sources, queries, evidence)
+        for name, value in outputs.items():
+            (tmp / name).write_bytes(value)
+        verify(tmp)
+        w.publish_directory(tmp, dest)
+    return {'created': True, 'groups': len(evidence['groups']), 'source_rows': evidence['included_source_rows'], 'semantic_correctness_verified': False}
+
+
+def verify(folder):
+    root = Path(folder)
+    if root.is_symlink() or not root.is_dir() or {p.name for p in root.iterdir()} != FILES:
+        raise w.Invalid('Exact group bundle files required.')
+    data = {name: w.read(root/name, legacy.MAX_FILE if name == 'snapshot.sqlite' else w.MAX_OUTPUT) for name in FILES}
+    receipt = w.parse(data['receipt.json'], w.MAX_OUTPUT)
+    w.exact(receipt, ('format', 'version', 'snapshot_sha256', 'spec_sha256', 'queries_sha256', 'groups_sha256', 'environment', 'sources', 'limits', 'scope', 'receipt_sha256'))
+    if receipt['format'] != 'queryproof-groups/1' or receipt['version'] != VERSION or receipt['receipt_sha256'] != w.sha(w.canon({k:v for k,v in receipt.items() if k != 'receipt_sha256'})):
+        raise w.Invalid('Invalid group receipt.')
+    if receipt['snapshot_sha256'] != w.sha(data['snapshot.sqlite']) or receipt['spec_sha256'] != w.sha(data['spec.json']):
+        raise w.Invalid('Snapshot/spec binding mismatch.')
+    current = environment(); recorded = receipt['environment']; w.exact(recorded, current)
+    for key in current:
+        if key in ('sqlite_version', 'sqlite_source_id', 'sqlite_compile_options', 'queryproof_version', 'witness_version', 'groups_version'):
+            if recorded[key] != current[key]:
+                raise w.Invalid('SQLite build or tool version changed.')
+        elif type(recorded[key]) is not str or not recorded[key]:
+            raise w.Invalid('Invalid environment metadata.')
+    with tempfile.TemporaryDirectory(prefix='queryproof-groups-verify-') as td:
+        db = Path(td)/'snapshot.sqlite'; db.write_bytes(data['snapshot.sqlite'])
+        queries, evidence = compute(db, spec(data['spec.json']))
+    rebuilt = products(receipt['snapshot_sha256'], data['spec.json'], receipt['sources'], queries, evidence, recorded)
+    if any(data[name] != value for name, value in rebuilt.items()):
+        raise w.Invalid('Recomputed group evidence differs.')
+    return {'verified': True, 'groups': len(evidence['groups']), 'source_rows': evidence['included_source_rows'], 'semantic_correctness_verified': False}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest='cmd', required=True)
+    p = sub.add_parser('run'); src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument('--db'); src.add_argument('--csv', action='append', metavar='TABLE=PATH')
+    p.add_argument('--spec', required=True); p.add_argument('--out', required=True)
+    p = sub.add_parser('verify'); p.add_argument('directory')
+    args = parser.parse_args(argv)
+    try:
+        if args.cmd == 'verify':
+            result = verify(args.directory)
+        else:
+            csvs = []
+            for item in args.csv or []:
+                if '=' not in item:
+                    raise w.Invalid('CSV requires TABLE=PATH.')
+                csvs.append(item.split('=', 1))
+            result = create(args.out, args.spec, args.db, csvs)
+        print(json.dumps(result)); return 0
+    except (ValueError, OSError, sqlite3.Error, csv.Error, UnicodeError, TypeError, KeyError, RecursionError):
+        print('Grouped witness failed: check supported schema, bounds, source types, SQLite build and new output. Private values are not echoed.', file=sys.stderr)
+        return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main())

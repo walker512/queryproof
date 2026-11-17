@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "queryproof"
-version = "0.3.0"
+version = "0.4.0"
 description = "Offline reproducible evidence bundles for bounded CSV and SQLite queries"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -15,6 +15,7 @@ readme = "README.md"
 [project.scripts]
 queryproof = "queryproof:main"
 queryproof-witness = "queryproof_witness:main"
+queryproof-groups = "queryproof_groups:main"
 
 [tool.setuptools]
-py-modules = ["queryproof", "queryproof_witness"]
+py-modules = ["queryproof", "queryproof_witness", "queryproof_groups"]

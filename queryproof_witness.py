@@ -231,14 +231,18 @@ def create(out,spec_path,database=None,csvs=()):
         qs,evidence=compute(db,s);files=products(sha(read(db,legacy.MAX_FILE)),sr,sources,qs,evidence)
         for n,b in files.items():(tmp/n).write_bytes(b)
         verify(tmp)
-        # Reserve an absent destination to refuse even a newly appeared empty directory.
-        dest.mkdir(exist_ok=False)
-        try:os.replace(tmp,dest)
-        except Exception:
-            try:dest.rmdir()
-            except OSError:pass
-            raise
+        publish_directory(tmp,dest)
     return {'created':True,'mode':s['mode'],'matched_rows':evidence['matched_rows'],'included_source_rows':evidence['included_source_rows'],'matching_rows_not_included':evidence['matching_rows_not_included'],'semantic_correctness_verified':False}
+
+def publish_directory(source,dest):
+    # Cross-platform reservation. Never replace an existing directory or file.
+    # Computation/verification finishes first; interrupted copying can leave an
+    # incomplete destination, which verify rejects. Do not advertise atomicity.
+    dest=Path(dest);dest.mkdir(mode=0o700,exist_ok=False)
+    for path in sorted(Path(source).iterdir()):
+        with (dest/path.name).open('xb') as target:
+            target.write(path.read_bytes())
+
 
 def verify(folder):
     root=Path(folder)

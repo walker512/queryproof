@@ -104,3 +104,17 @@ The receipt also records Python version/implementation, OS and architecture, but
 The old `queryproof.py`, its 0.2.0 receipts and all 36 original tests are unchanged. The new installed entry point is `queryproof-witness`; it does not inherit old hosted-CI/browser acceptance merely by sharing this repository. Both modes include a complete sensitive database snapshot and perform no upload.
 
 Witness increment validation: **67 local tests passed, zero skips** (36 original + 31 new), plus offline wheel installation and both installed commands exercised outside the source checkout. See [the separate validation scope](docs/SOURCE_WITNESSES.md#executed-verification-for-this-increment); old hosted/browser acceptance does not imply new-mode acceptance.
+
+## Grouped contribution witnesses (0.4.0 candidate)
+
+[Grouped source contributions](docs/GROUP_CONTRIBUTORS.md) link each explicit COUNT(*) / COUNT(column) / strict integer SUM to all source rows, duplicate contributions and NULL exclusions. Actual SQLite results must match an independent derivation from complete snapshot-local witnesses. This is bounded single-table typed grouping, not arbitrary SQL lineage or business correctness.
+
+```sh
+python examples/make_group_demo.py demo-groups.sqlite
+python -m queryproof_groups run --db demo-groups.sqlite --spec examples/group_sales.json --out sales-group-evidence
+python -m queryproof_groups verify sales-group-evidence
+```
+
+The complete snapshot is private by default. Inspect before sharing. CSV cells remain TEXT, so strict SUM requires a prepared SQLite integer column. Details include signed-zero/type/collation semantics, no-truncation limits and Windows publication limitations.
+
+[Independent grouped-mode audit](docs/GROUP_AUDIT.md): **96/96 Linux Python 3.12 tests, zero skips**, plus 80 independently authored real SQLite randomized oracle trials. A freshly installed wheel ran the seven-row example outside the source tree and verified all four groups. Output directory mode 0700 was checked. True Windows/macOS, remote CI and new GUI remain unverified. This is a rebuilt candidate from public 0.3, not recovery of an older unpublished RC2.

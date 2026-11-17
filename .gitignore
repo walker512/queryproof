@@ -5,3 +5,7 @@ evidence/
 *.sqlite
 *.sqlite-*
 *.db
+build/
+dist/
+*.egg-info/
+.venv/
