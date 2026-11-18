@@ -16,6 +16,7 @@ readme = "README.md"
 queryproof = "queryproof:main"
 queryproof-witness = "queryproof_witness:main"
 queryproof-groups = "queryproof_groups:main"
+queryproof-check = "queryproof_check:main"
 
 [tool.setuptools]
-py-modules = ["queryproof", "queryproof_witness", "queryproof_groups"]
+py-modules = ["queryproof", "queryproof_witness", "queryproof_groups", "queryproof_check"]

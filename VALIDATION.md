@@ -1,3 +1,40 @@
+# Unified offline handoff check candidate (unpublished)
+
+Based on the independently audited publication-safety patch released at
+`1827645818b9108b2033b2f4b6d4bfd63fd9be5a`. This candidate adds one optional
+`queryproof-check` CLI and does not change existing receipt schemas or computation.
+
+Executed locally on Linux: **118 tests passed, zero skips** (102 existing + 16
+new tests), compileall passed, standard-library-only wheel built with no build
+isolation, installed without index into a fresh venv. Outside the source checkout,
+the installed `queryproof` generated a synthetic CSV bundle and installed
+`queryproof-check --json` verified it. A first smoke invocation used the wrong
+table alias and correctly failed before output publication; the corrected input
+ran successfully. Three-format round trips and subprocess CLI coverage are in
+the public tests, along with tampering, duplicate/oversize/malformed receipt,
+unsupported-format no-fallback, mixed layout, symlink, private-error suppression,
+read-only content preservation, and legacy HTML verification scope tests.
+
+No browser, remote CI, Windows or fresh independent-review result is claimed for
+this increment. The legacy HTML display remains unverified; witness and group
+HTML is recomputed by their existing verifiers. Exact-layout checks are stricter
+than legacy `verify`; recipient must supply a complete clean bundle. Status is
+recomputation only, never semantic correctness, source truth or authorship.
+Filesystem races / malicious local processes remain outside the threat model.
+
+The first candidate failed independent review: a re-signed legacy receipt with a
+non-string key-check table escaped as AttributeError. Revision 2 validates the
+legacy nested inputs before dispatch, catches known malformed-shape exceptions,
+and has a final Exception boundary returning CHECK_FAILED (never successful
+verification). KeyboardInterrupt and SystemExit are not swallowed. New tests run
+13 re-signed malformed key/join/result/source/environment cases through the real
+CLI --json, requiring exit 1, parseable JSON and empty stderr without private
+strings or paths. Unexpected verifier failures are tested in all three modes.
+118 tests and compileall above were rerun on this revision; earlier wheel smoke
+preceded this revision and is not claimed as its installed-runtime verification.
+
+## Earlier published and historical validation records
+
 # Validation · QueryProof publication-safety candidate
 
 ## Current candidate: local publication correction

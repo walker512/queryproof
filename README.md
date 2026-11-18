@@ -6,6 +6,30 @@ Turn a CSV or SQLite query into a local evidence bundle: a consistent database s
 
 QueryProof proves only that the recorded computation reproduces on the recorded snapshot and SQLite runtime. It does **not** prove the query answers the intended question, that the data is true, or who authored the evidence. Checksums are not digital signatures.
 
+## Received a bundle? One verification command
+
+```sh
+python -m queryproof_check path/to/evidence --json
+```
+
+Or install this checkout and use `queryproof-check`. It recognizes the three fixed receipt
+formats (query, single-table witnesses, grouped contributors), checks the exact bundle
+layout, and invokes the corresponding full offline recomputation. No API, network,
+model, format guessing or fallback verifier. Unknown formats, mixed/incomplete bundles,
+symlink members and malformed receipts fail closed with exit 1; success returns 0.
+JSON contains fixed status metadata, not private SQL, row values or exception messages.
+Unexpected verifier failures return `CHECK_FAILED`, not a successful or conclusive
+bundle verdict. The original format-specific commands remain available for deeper diagnostics.
+
+A successful check is **not** evidence of source truth, business correctness or authorship.
+For legacy query bundles it verifies the computation, **not the HTML display**; the returned
+`scope` makes this explicit. Witness/group modes regenerate and compare their HTML as
+well. All modes still require the matching recorded SQLite/tool build. Treat the bundle
+as sensitive and its containing filesystem as trusted; this is not an OS sandbox and
+does not protect against concurrent modification by another local process. The wrapper
+rejects extra files even where the old legacy verifier permitted them. It never repairs,
+upgrades or deletes a bundle.
+
 ## First result in a minute
 
 Python **3.11+**, standard library only. Clone/download this repository; no dependency installation required.
@@ -101,7 +125,7 @@ The receipt also records Python version/implementation, OS and architecture, but
 
 [Source witnesses](docs/SOURCE_WITNESSES.md) link a bounded typed projection or COUNT(*) to exact snapshot-local row locators and full source values. Duplicate projected rows stay distinct; paged results report omitted matching rows, while COUNT requires the complete bounded source set. It uses explicit structured specs, not arbitrary SQL parsing, and rejects unsupported table/query forms. Try `python -m queryproof_witness run --csv sales=examples/sales.csv --spec examples/witness_rows.json --out private-witness`, then `python -m queryproof_witness verify private-witness`.
 
-The old `queryproof.py`, its 0.2.0 receipts and all 36 original tests are unchanged. The new installed entry point is `queryproof-witness`; it does not inherit old hosted-CI/browser acceptance merely by sharing this repository. Both modes include a complete sensitive database snapshot and perform no upload.
+The legacy receipt format remains 0.2.0-compatible; later publication-safety fixes changed its implementation without changing that format. The new installed entry point is `queryproof-witness`; it does not inherit old hosted-CI/browser acceptance merely by sharing this repository. Both modes include a complete sensitive database snapshot and perform no upload.
 
 Witness increment validation: **67 local tests passed, zero skips** (36 original + 31 new), plus offline wheel installation and both installed commands exercised outside the source checkout. See [the separate validation scope](docs/SOURCE_WITNESSES.md#executed-verification-for-this-increment); old hosted/browser acceptance does not imply new-mode acceptance.
 
