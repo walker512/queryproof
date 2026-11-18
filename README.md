@@ -159,3 +159,12 @@ Existing artifacts are not chmodded. Trusted parent directories and local accoun
 are required; malicious same-account path replacement, Windows ACL isolation,
 filesystem ACL overrides and power-loss durability are outside these guarantees.
 This correction does not expand SQL lineage or prove answers semantically correct.
+
+## Optional legacy HTML consistency check
+
+`python -m queryproof_check BUNDLE --strict-display --json` additionally requires
+exact supported HTML bytes after successful data verification. Legacy defaults
+remain data-only; the historical HTML warning remains accurate. Only the shipped
+`queryproof/1` 0.2.0 renderer is supported for this new path; unknown versions fail
+closed. This does not prove source truth or protect a report modified after checking.
+See [strict display scope and compatibility](docs/STRICT_DISPLAY.md).

@@ -40,11 +40,13 @@ def legacy_structure(receipt):
                 name(value)
 
 
-def check(directory):
+def check(directory, *, strict_display=False):
     """No inferred SQL, paths, commands, plugins or fallback verifiers from a receipt."""
     mode = None
     stage = 'input'
     try:
+        if type(strict_display) is not bool:
+            raise ValueError('Boolean display policy required')
         root = Path(directory)
         if root.is_symlink() or not root.is_dir():
             raise ValueError('Directory required')
@@ -72,11 +74,44 @@ def check(directory):
         if mode == 'query':
             legacy_structure(receipt)
             legacy.verify(root / 'snapshot.sqlite', receipt)
+            if strict_display:
+                stage = 'display'
+                # Only this fixed legacy renderer is supported. No template, path,
+                # script or renderer is selected from untrusted receipt fields.
+                if receipt.get('version') != '0.2.0' or legacy.VERSION != '0.2.0':
+                    return outcome(False, mode, 'UNSUPPORTED_DISPLAY_VERSION', stage)
+                # Legacy verification intentionally retains its historical Python
+                # equality semantics. Strict mode additionally distinguishes JSON
+                # bool/int/float at every rebuilt depth, including diagnostics.
+                rebuilt = legacy.create(
+                    root / 'snapshot.sqlite', receipt['sql'], receipt['sources'],
+                    [(x['table'], x['key']) for x in receipt['key_checks']],
+                    [(*x['left'], *x['right']) for x in receipt['join_checks']],
+                    'rows' in receipt['result'])
+                rebuilt['environment'] = receipt['environment']
+                def typed_body(value):
+                    body = {k: v for k, v in value.items() if k != 'receipt_sha256'}
+                    return json.dumps(body, sort_keys=True, ensure_ascii=True,
+                                      separators=(',', ':'), allow_nan=False)
+                if typed_body(rebuilt) != typed_body(receipt):
+                    return outcome(False, mode, 'TYPED_EVIDENCE_MISMATCH', stage)
+                expected = legacy.report(receipt).encode('utf-8')
+                if len(expected) > witness.MAX_OUTPUT:
+                    raise ValueError('Rendered display exceeds limit')
+                actual = witness.read(root / 'report.html', witness.MAX_OUTPUT)
+                if actual != expected:
+                    return outcome(False, mode, 'DISPLAY_MISMATCH', stage)
+
         elif mode == 'witness':
             witness.verify(root)
         else:
             groups.verify(root)
-        return outcome(True, mode, 'VERIFIED', 'complete')
+        result = outcome(True, mode, 'VERIFIED', 'complete')
+        if strict_display:
+            result['display_verified'] = True
+            result['scope'] = ('Snapshot, SQL result and diagnostics recomputed; fixed legacy 0.2.0 HTML bytes matched.'
+                               if mode == 'query' else result['scope'])
+        return result
     except (ValueError, OSError, sqlite3.Error, UnicodeError, KeyError, TypeError, RecursionError, OverflowError, AttributeError, IndexError):
         return outcome(False, mode, 'INVALID_BUNDLE', stage)
     except Exception:
@@ -100,8 +135,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory')
     parser.add_argument('--json', action='store_true', help='Fixed metadata only; no SQL, source values or exception text')
+    parser.add_argument('--strict-display', action='store_true',
+                        help='Also require exact supported HTML bytes; never opens or executes HTML')
     args = parser.parse_args(argv)
-    result = check(args.directory)
+    result = check(args.directory, strict_display=args.strict_display)
     if args.json:
         print(json.dumps(result, indent=2))
     elif result['ok']:

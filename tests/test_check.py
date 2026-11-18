@@ -35,6 +35,8 @@ class CheckTests(unittest.TestCase):
             result=c.check(folder)
             self.assertTrue(result['ok'],result);self.assertEqual(result['mode'],mode)
             self.assertFalse(result['semantic_correctness_verified']);self.assertFalse(result['authorship_verified'])
+            strict=c.check(folder,strict_display=True)
+            self.assertTrue(strict['ok'],strict);self.assertTrue(strict['display_verified'])
 
     def test_real_cli_json_and_exit(self):
         for mode,folder in self.bundles.items():
