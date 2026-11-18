@@ -30,7 +30,7 @@ python queryproof.py run --db analytics.sqlite --sql question.sql --out evidence
 python queryproof.py verify evidence
 ```
 
-`--out` must be a new directory. Errors return exit code 1, successful creation/verification return 0. Failed runs do not publish a partial output directory. `--key TABLE COLUMN` and `--join LEFT KEY RIGHT KEY` are repeatable. No shell commands or SQL are executed from filenames. `--sql` takes a UTF-8 file, not inline SQL.
+`--out` must be a new directory. Errors return exit code 1, successful creation/verification return 0. Computation/verification failures occur before output reservation. Once copying starts, interruption or I/O failure can leave an incomplete private output directory; verify it before use and retry with a new destination. Publication is not atomic. `--key TABLE COLUMN` and `--join LEFT KEY RIGHT KEY` are repeatable. No shell commands or SQL are executed from filenames. `--sql` takes a UTF-8 file, not inline SQL.
 
 ## What is inside?
 
@@ -40,7 +40,7 @@ python queryproof.py verify evidence
 | `receipt.json` | SQL, runtime version, SHA-256 checksums, result column names/count, profile and explicit checks |
 | `report.html` | Offline, escaped display of the receipt; no scripts, external assets or network calls |
 
-**The bundle is sensitive.** Snapshot contains **all original tables**, not only query output. SQL literals, column names and statistics may also disclose information. Result rows are omitted from JSON/HTML unless `--include-rows`, but **this does not redact the snapshot**. Nothing is uploaded. Review or regenerate a deliberately reduced source dataset before sharing. Do not commit private bundles. Unix output directories are owner-only; on Windows use your OS account/file permissions. Files are not encrypted or securely erased.
+**The bundle is sensitive.** Snapshot contains **all original tables**, not only query output. SQL literals, column names and statistics may also disclose information. Result rows are omitted from JSON/HTML unless `--include-rows`, but **this does not redact the snapshot**. Nothing is uploaded. Review or regenerate a deliberately reduced source dataset before sharing. Do not commit private bundles. New Unix output directories request 0700 and all new bundle files request 0600 at creation; on Windows use your OS account/file permissions. Files are not encrypted or securely erased.
 
 A hash-only receipt can be shared separately if its metadata is appropriate, but verification still needs the exact snapshot. Do not trust the report's appearance: run `verify`. Verification rechecks the receipt checksum, exact snapshot bytes, SQLite version, ordered query result and every diagnostic. Re-signing the JSON after changing a result does not bypass recomputation. Someone who changes both the dataset and receipt can produce another valid bundle: use your own trusted hash or external signing channel if provenance matters.
 
@@ -118,3 +118,20 @@ python -m queryproof_groups verify sales-group-evidence
 The complete snapshot is private by default. Inspect before sharing. CSV cells remain TEXT, so strict SUM requires a prepared SQLite integer column. Details include signed-zero/type/collation semantics, no-truncation limits and Windows publication limitations.
 
 [Independent grouped-mode audit](docs/GROUP_AUDIT.md): **96/96 Linux Python 3.12 tests, zero skips**, plus 80 independently authored real SQLite randomized oracle trials. A freshly installed wheel ran the seven-row example outside the source tree and verified all four groups. Output directory mode 0700 was checked. True Windows/macOS, remote CI and new GUI remain unverified. This is a rebuilt candidate from public 0.3, not recovery of an older unpublished RC2.
+
+
+## Publication safety correction (unpublished candidate)
+
+Legacy `run`, source witnesses and grouped contributors now share exclusive
+new-directory reservation and private file creation. A concurrently created empty
+directory is refused rather than replaced by rename. Both existing empty and
+nonempty destinations are preserved. No process-wide umask change is made.
+
+102 synthetic/local SQLite tests pass on Linux Python 3.12, including a deterministic
+old-version overwrite counterexample, 24 concurrent publishers, both umask 000 and
+022 in all three bundle modes, and interrupted-copy verification rejection.
+These are local results, not remote CI or Windows/macOS/browser acceptance.
+Existing artifacts are not chmodded. Trusted parent directories and local account
+are required; malicious same-account path replacement, Windows ACL isolation,
+filesystem ACL overrides and power-loss durability are outside these guarantees.
+This correction does not expand SQL lineage or prove answers semantically correct.

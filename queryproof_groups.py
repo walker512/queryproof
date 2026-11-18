@@ -224,7 +224,7 @@ def create(out, spec_path, database=None, csvs=()):
         queries, evidence = compute(db, s)
         outputs = products(w.sha(w.read(db, legacy.MAX_FILE)), raw, sources, queries, evidence)
         for name, value in outputs.items():
-            (tmp / name).write_bytes(value)
+            legacy.private_write(tmp / name, value)
         verify(tmp)
         w.publish_directory(tmp, dest)
     return {'created': True, 'groups': len(evidence['groups']), 'source_rows': evidence['included_source_rows'], 'semantic_correctness_verified': False}

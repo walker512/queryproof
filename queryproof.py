@@ -66,6 +66,25 @@ def connect(path):
     return con
 
 
+def private_write(path, data):
+    """Exclusive creation, private POSIX file mode, no global umask changes."""
+    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(data)
+
+
+def publish_directory(source, dest):
+    """Reserve a new destination without overwriting even an empty directory.
+
+    Verification must finish first. Copy interruptions leave an incomplete private
+    directory, not an atomic publication; never remove or reuse that destination.
+    """
+    dest = Path(dest)
+    dest.mkdir(mode=0o700, exist_ok=False)
+    for path in sorted(Path(source).iterdir()):
+        private_write(dest / path.name, path.read_bytes())
+
+
 def snapshot(destination, database=None, csvs=()):
     dest = Path(destination)
     if dest.exists():
@@ -342,7 +361,7 @@ def main(argv=None):
             return 0 if outcome['ok'] else 1
         else:
             dest = Path(args.out)
-            if dest.exists():
+            if dest.exists() or dest.is_symlink():
                 raise ValueError('Output directory must not exist')
             sql = bounded(args.sql).read_text(encoding='utf-8')
             specs = []
@@ -355,11 +374,10 @@ def main(argv=None):
                 folder = Path(tmp)
                 sources = snapshot(folder/'snapshot.sqlite', args.db, specs)
                 receipt = create(folder/'snapshot.sqlite', sql, sources, args.key, args.join, args.include_rows)
-                (folder/'receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
-                (folder/'report.html').write_text(report(receipt), encoding='utf-8')
+                private_write(folder/'receipt.json', json.dumps(receipt, indent=2).encode('utf-8'))
+                private_write(folder/'report.html', report(receipt).encode('utf-8'))
                 verify(folder/'snapshot.sqlite', receipt)
-                # Destination was checked; rename fails if an existing nonempty directory appears.
-                os.rename(folder, dest)
+                publish_directory(folder, dest)
             print(f'Created {dest}. PRIVATE: includes full snapshot and SQL. Review before sharing.')
         return 0
     except (ValueError, OSError, sqlite3.Error, csv.Error, UnicodeError, KeyError, TypeError) as exc:
